@@ -1,0 +1,11 @@
+{
+  "ServerProcesses": [
+    {
+      "LaunchPath": "/local/game/OdinFleet/Binaries/Linux/OdinFleetServer",
+      "Parameters": "/Game/Maps/Lvl_FirstPerson?listen -server -log -forcelogflush -abslog=/local/game/Saved/Logs/Server.log",
+      "ConcurrentExecutions": 1
+    }
+  ],
+  "MaxConcurrentGameSessionActivations": 1,
+  "GameSessionActivationTimeoutSeconds": 300
+}

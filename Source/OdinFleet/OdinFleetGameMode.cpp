@@ -188,25 +188,24 @@ void AOdinFleetGameMode::InitGameLift()
 
 		if (Switch.Split("=",&Key,&Value))
 		{
+		    UE_LOG(GameServerLog, Log, TEXT("KEY: %s"), *Key);
+		    UE_LOG(GameServerLog, Log, TEXT("VALUE: %s"), *Value);
 			if (Key.Equals("extport"))
 			{
+				UE_LOG(GameServerLog, Log, TEXT("EXTPORT EXIST"));
 				ProcessParameters->port = FCString::Atoi(*Value);
 			}
 		}
 	}
-	/*if (UNetDriver* Driver = GetWorld()->GetNetDriver())
+	if (UNetDriver* Driver = GetWorld()->GetNetDriver())
 	{
 		TSharedPtr<const FInternetAddr> LocalAddr = Driver->GetLocalAddr();
-		UE_LOG(GameServerLog, Log, TEXT("PORT %i!"),LocalAddr->GetPort());
+		
 		if (LocalAddr.IsValid())
 		{
-			const int32 Port = LocalAddr->GetPort();
-			if (Port == 0)
-			{
-				ProcessParameters->port = Port;
-			}
+			UE_LOG(GameServerLog, Log, TEXT("PORT %i!"),LocalAddr->GetPort());
 		}
-	}*/
+	}
 
 	TArray<FString> LogFiles;
 	LogFiles.Add(TEXT("OdinFleet/Saved/Logs/server.log"));
