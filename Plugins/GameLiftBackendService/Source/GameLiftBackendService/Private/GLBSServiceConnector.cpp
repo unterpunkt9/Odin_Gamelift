@@ -12,7 +12,7 @@ void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
 	FHttpModule& Module= FHttpModule::Get();
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = Module.CreateRequest();
 
-	Request->SetURL("https://europe-west3-odinfleettest.cloudfunctions.net/AWSConnect");
+	Request->SetURL("https://europe-west3-odinfleettest.cloudfunctions.net/GameLiftSearchSessions");
 	Request->SetVerb("GET");
 	Request->SetHeader("Content-Type", "application/json");
 
@@ -58,7 +58,7 @@ void UGLBSServiceConnector::CreateGameSession(FSingleGameSessionResult OnCreated
 	FHttpModule& Module= FHttpModule::Get();
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = Module.CreateRequest();
 
-	Request->SetURL("https://europe-west3-odinfleettest.cloudfunctions.net/GameLiftCreateSession");
+	Request->SetURL("https://europe-west3-odinfleettest.cloudfunctions.net/GameLiftCreateGameSession");
 	
 	Request->SetVerb("POST");
 	Request->SetHeader("Content-Type", "application/json");
@@ -95,55 +95,6 @@ void UGLBSServiceConnector::CreateGameSession(FSingleGameSessionResult OnCreated
 			return;
 		}
 		FGameSessionData data;
-		OnCreated.Execute(data);
-	});
-	Request->ProcessRequest();
-}
-
-void UGLBSServiceConnector::CreatePlayerSession(FPlayerSessionResult OnCreated,FString GameSessionId,FString PlayerId)
-{
-	TFunction<void(const FJsonObject& Result, const FString& Error)> Done;
-	FHttpModule& Module= FHttpModule::Get();
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = Module.CreateRequest();
-
-	Request->SetURL("https://europe-west3-odinfleettest.cloudfunctions.net/GameLiftCloseGameSession");
-	Request->SetVerb("POST");
-	Request->SetHeader("Content-Type", "application/json");
-
-	
-	TSharedPtr<FJsonObject> JsonData = MakeShared<FJsonObject>();
-	JsonData->SetStringField(TEXT("GameSessionId"),GameSessionId);
-	JsonData->SetStringField(TEXT("PlayerID"),PlayerId);
-	
-
-	// Convert to string
-	FString RequestBody;
-	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RequestBody);
-	FJsonSerializer::Serialize(JsonData.ToSharedRef(), Writer);
-
-	Request->SetContentAsString(RequestBody);
-	
-	Request->OnProcessRequestComplete().BindLambda([OnCreated](FHttpRequestPtr, FHttpResponsePtr Response,bool bOK)
-	{
-		const FString ResponseString = Response->GetContentAsString();
-		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseString);
-		TSharedPtr<FJsonObject> Json;
-		if (!FJsonSerializer::Deserialize(Reader,Json) || !Json.IsValid())
-		{
-			FPlayerSessionData data;
-			OnCreated.Execute(data);
-			return;
-		}
-		if (Json->HasField(FString(TEXT("GameSession"))))
-		{
-			FPlayerSessionData data;
-			TSharedPtr<FJsonObject> GameSession = Json->GetObjectField(FString(TEXT("GameSession")));
-			TSharedPtr<FJsonValue> GameSessionsJson = Json->GetField(FString(TEXT("GameSession")),EJson::Object);
-			data = CreatePlayerSessionFromJson(GameSessionsJson);
-			OnCreated.Execute(data);
-			return;
-		}
-		FPlayerSessionData data;
 		OnCreated.Execute(data);
 	});
 	Request->ProcessRequest();
