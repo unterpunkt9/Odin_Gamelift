@@ -6,6 +6,6 @@
       "ConcurrentExecutions": 1
     }
   ],
-  "MaxConcurrentGameSessionActivations": 1,
+  "MaxConcurrentGameSessionActivations": 10,
   "GameSessionActivationTimeoutSeconds": 300
 }

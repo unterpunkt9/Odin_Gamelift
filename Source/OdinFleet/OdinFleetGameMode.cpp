@@ -108,7 +108,7 @@ void AOdinFleetGameMode::InitGameLift()
 		UE_LOG(GameServerLog, SetColor, TEXT("%s"), COLOR_NONE);
 	}
 
-	FGameLiftGenericOutcome InitSdkOutcome = GameLiftServerSdkModule->InitSDK(ServerParameters);
+	FGameLiftGenericOutcome InitSdkOutcome = GameLiftServerSdkModule->InitSDK();
 	if (InitSdkOutcome.IsSuccess())
 	{
 		UE_LOG(GameServerLog, SetColor, TEXT("%s"), COLOR_GREEN);
@@ -160,9 +160,6 @@ void AOdinFleetGameMode::InitGameLift()
 				error.m_errorMessage.IsEmpty() ? TEXT("Unknown error") : *error.m_errorMessage);
 			}
 		}
-		
-		UE_LOG(GameServerLog, Log, TEXT("Dubuido"));
-
 	});
 
 

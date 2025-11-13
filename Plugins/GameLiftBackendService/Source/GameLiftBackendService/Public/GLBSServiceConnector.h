@@ -95,9 +95,6 @@ public:
 	static void CreateGameSession(FSingleGameSessionResult OnCreated,FString CreatorId,FString GameSessionName);
 
 	UFUNCTION(BlueprintCallable, Category = "GLBS")
-	static void CreatePlayerSession(FPlayerSessionResult OnCreated,FString GameSessionId,FString PlayerId);
-
-	UFUNCTION(BlueprintCallable, Category = "GLBS")
 	static void CloseGameSession(FSingleGameSessionResult OnCreated,FString GameSessionId);
 	
 private:

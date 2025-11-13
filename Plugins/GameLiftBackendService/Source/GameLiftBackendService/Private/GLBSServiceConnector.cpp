@@ -3,7 +3,6 @@
 
 #include "GLBSServiceConnector.h"
 
-#include <ThirdParty/skia/skia-simplify.h>
 
 
 void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)

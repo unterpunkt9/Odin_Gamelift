@@ -3,7 +3,7 @@ FROM ghcr.io/epicgames/unreal-engine:runtime
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
  && rm -rf /var/lib/apt/lists/*
-
+USER ue4
 # Put game under /local/game and make ue4 the owner
 WORKDIR /local/game
 COPY --chown=ue4:ue4 LinuxServer/ /local/game/
@@ -16,7 +16,7 @@ RUN chmod 0755 /entrypoint.sh \
  && chown -R ue4:ue4 /local /gamelift
 
 # drop privileges – UE5 refuses to run as root
-USER ue4
+
 
 EXPOSE 7777/udp
 ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
