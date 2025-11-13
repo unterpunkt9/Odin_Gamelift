@@ -1,0 +1,40 @@
+C4Context
+    System_Boundary(b0,""){
+        Person(ClientA,"Client1")
+        Person(ClientB,"Client2")
+        Person(ClientC,"Client3")
+         Person(ClientD,"ClientN")
+
+        System(BackendService,"BackendService")
+        System_Boundary(b4,"AWS"){
+            System(AWS,"AWS GameLift")
+        }
+        System_Boundary(b1,"OdinFleet Server Instanz"){
+            Container_Boundary(b2,"DockerContainer 1 (ComputeDevice 1)"){
+                System(GameLiftAgent,"GameLiftAgent 1")
+                System(GameServer,"UnrealGameServer 1_1")
+                System(GameServer2,"UnrealGameServer 1_N")
+            }
+            Container_Boundary(b3,"DockerContainer N (ComputeDevice 2)"){
+       
+                System(GameLiftAgent2,"GameLiftAgent 2")
+                System(GameServer3,"UnrealGameServer 2_1")
+            }
+        }
+
+    }
+
+    Rel(GameLiftAgent,GameServer,"Manages")
+    Rel(GameLiftAgent,GameServer2,"Manages")
+       Rel(GameLiftAgent2,GameServer3,"Manages")
+    BiRel(ClientA,BackendService,"Communicates")
+    BiRel(ClientB,BackendService,"Communicates")
+    BiRel(ClientC,BackendService,"Communicates")
+    BiRel(ClientD,BackendService,"Communicates")
+    Rel(BackendService,AWS,"Communicates")
+    Rel(AWS,GameLiftAgent,"erhält informationen")
+    Rel(AWS,GameLiftAgent2,"erhält informationen")
+ UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="2")
+
+
+    
