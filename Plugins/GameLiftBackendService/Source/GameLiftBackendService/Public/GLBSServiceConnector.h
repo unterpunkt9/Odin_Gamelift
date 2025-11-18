@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
-
+#include "GameLiftExeptions.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
@@ -25,9 +25,9 @@ struct FGameSessionData
 	UPROPERTY(BlueprintReadWrite)
 	FString FleetId;
 	UPROPERTY(BlueprintReadWrite)
-	int32 CreationTime;
+	FDateTime CreationTime;
 	UPROPERTY(BlueprintReadWrite)
-	int32 TerminationTime;
+	FDateTime TerminationTime;
 	UPROPERTY(BlueprintReadWrite)
 	int32 CurrentPlayerCount;
 	UPROPERTY(BlueprintReadWrite)
@@ -79,9 +79,9 @@ struct FPlayerSessionData
 
 
 
-DECLARE_DYNAMIC_DELEGATE_OneParam(FSearchComplete,const TArray<FGameSessionData>&, GameSessions);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FSingleGameSessionResult,FGameSessionData, GameSession);
-DECLARE_DYNAMIC_DELEGATE_OneParam(FPlayerSessionResult,FPlayerSessionData, GameSession);
+DECLARE_DYNAMIC_DELEGATE_ThreeParams(FSearchComplete,const TArray<FGameSessionData>&, GameSessions,bool ,withError,EGameLiftExceptionsBP, exception );
+DECLARE_DYNAMIC_DELEGATE_ThreeParams(FSingleGameSessionResult,FGameSessionData, GameSession,bool ,withError,EGameLiftExceptionsBP, exception );
+DECLARE_DYNAMIC_DELEGATE_ThreeParams(FPlayerSessionResult,FPlayerSessionData, GameSession,bool ,withError,EGameLiftExceptionsBP, exception );
 UCLASS()
 class GAMELIFTBACKENDSERVICE_API UGLBSServiceConnector : public UBlueprintFunctionLibrary
 {

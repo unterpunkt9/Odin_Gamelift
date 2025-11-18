@@ -3,6 +3,7 @@
 
 #include "GLBSServiceConnector.h"
 
+#include "GameLiftExeptions.h"
 
 
 void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
@@ -25,7 +26,7 @@ void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
 			TArray<FGameSessionData> GameSessions;
 			FGameSessionData data;
 			GameSessions.Add(data);
-			OnReady.Execute(GameSessions);
+			OnReady.Execute(GameSessions,false,EGameLiftExceptionsBP::None);
 			return;
 		}
 		if (Json->HasField(FString(TEXT("GameSessions"))))
@@ -38,13 +39,13 @@ void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
 				data = CreateGameSessionFromJson(GameSession);
 				GameSessionsStruct.Add(data);
 			}			
-			OnReady.Execute(GameSessionsStruct);
+			OnReady.Execute(GameSessionsStruct,false,EGameLiftExceptionsBP::None);
 			return;
 		}
 		TArray<FGameSessionData> GameSessions;
 		FGameSessionData data;
 		GameSessions.Add(data);
-		OnReady.Execute(GameSessions);
+		OnReady.Execute(GameSessions,false,EGameLiftExceptionsBP::None);
 
 	});
 
@@ -79,10 +80,17 @@ void UGLBSServiceConnector::CreateGameSession(FSingleGameSessionResult OnCreated
 		const FString ResponseString = Response->GetContentAsString();
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseString);
 		TSharedPtr<FJsonObject> Json;
+		EGameLiftExceptions c = static_cast<EGameLiftExceptions>(Response->GetResponseCode());
+		if (c == FLEET_CAPACITY_EXCEPTION)
+		{	FGameSessionData data;
+			OnCreated.Execute(data,true,EGameLiftExceptionsBP::Fleet_capacity_Exception);
+			return;
+		}
+		
 		if (!FJsonSerializer::Deserialize(Reader,Json) || !Json.IsValid())
 		{
 			FGameSessionData data;
-			OnCreated.Execute(data);
+			OnCreated.Execute(data,true,EGameLiftExceptionsBP::Exception);
 			return;
 		}
 		if (Json->HasField(FString(TEXT("GameSession"))))
@@ -90,11 +98,11 @@ void UGLBSServiceConnector::CreateGameSession(FSingleGameSessionResult OnCreated
 			FGameSessionData data;
 			TSharedPtr<FJsonValue> GameSessionsJson = Json->GetField(FString(TEXT("GameSession")),EJson::Object);
 			data = CreateGameSessionFromJson(GameSessionsJson);
-			OnCreated.Execute(data);
+			OnCreated.Execute(data,false,EGameLiftExceptionsBP::None);
 			return;
 		}
 		FGameSessionData data;
-		OnCreated.Execute(data);
+		OnCreated.Execute(data,false,EGameLiftExceptionsBP::None);
 	});
 	Request->ProcessRequest();
 }
@@ -129,7 +137,7 @@ void UGLBSServiceConnector::CloseGameSession(FSingleGameSessionResult OnClosed,F
 		if (!FJsonSerializer::Deserialize(Reader,Json) || !Json.IsValid())
 		{
 			FGameSessionData data;
-			OnClosed.Execute(data);
+			OnClosed.Execute(data,true,EGameLiftExceptionsBP::Exception);
 			return;
 		}
 		if (Json->HasField(FString(TEXT("GameSession"))))
@@ -141,11 +149,11 @@ void UGLBSServiceConnector::CloseGameSession(FSingleGameSessionResult OnClosed,F
 				TSharedPtr<FJsonValue> GameSessionsJson = GameSession->GetField(FString(TEXT("GameSessions")),EJson::Object);
 				data = CreateGameSessionFromJson(GameSessionsJson);
 			}
-			OnClosed.Execute(data);
+			OnClosed.Execute(data,false,EGameLiftExceptionsBP::None);
 			return;
 		}
 		FGameSessionData data;
-		OnClosed.Execute(data);
+		OnClosed.Execute(data,false,EGameLiftExceptionsBP::None);
 	});
 	Request->ProcessRequest();
 }
@@ -168,11 +176,17 @@ FGameSessionData UGLBSServiceConnector::CreateGameSessionFromJson(TSharedPtr<FJs
 	}
 	if (obj->HasField(TEXT("CreationTime")))
 	{
-		data.CreationTime =obj->GetIntegerField(TEXT("CreationTime"));
+		FString CreationTime= obj->GetStringField(TEXT("CreationTime"));
+		FDateTime Time;
+		FDateTime::ParseIso8601(*obj->GetStringField(TEXT("CreationTime")),Time);
+		data.CreationTime =Time;
 	}
 	if (obj->HasField(TEXT("TerminationTime")))
 	{
-		data.TerminationTime =obj->GetIntegerField(TEXT("TerminationTime"));
+		FString CreationTime= obj->GetStringField(TEXT("TerminationTime"));
+		FDateTime Time;
+		FDateTime::ParseIso8601(*obj->GetStringField(TEXT("TerminationTime")),Time);
+		data.TerminationTime =Time;
 	}
 	if (obj->HasField(TEXT("CurrentPlayerSessionCount")))
 	{
