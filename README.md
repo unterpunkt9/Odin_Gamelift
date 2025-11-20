@@ -1,27 +1,36 @@
-## **OdinFleet AWS Gamelift Integration**
 
-Requirements:
-* Dedicated Game Server
-* GameLift Server SDK
-* GameLift Server Agent
 
-* Docker
+# **OdinFleet AWS Gamelift Integration**
 
-### Dedicated Game Sercer
-If you don't already have one, build an Unreal Engine Dedicated Server. A full instruction can be found [here](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-dedicated-servers?application_version=4.27).
+This guide explains how to run an Unreal Engine dedicated server on [Odin Fleet](https://odin.4players.io/fleet/), a hosting service for scalable dedicated game servers. By integrating the server with Amazon GameLift Anywhere, the setup enables GameLift features such as matchmaking, session discovery, and lifecycle management while Odin Fleet provides the underlying compute resources.
+
+To demonstrate this integration, the repository includes an example Unreal project for building both a game client and a dedicated Linux server. It also provides a Docker directory containing everything needed to containerize the server for Odin Fleet: a Dockerfile, an entry script for launching the GameLift Agent, the gameliftagent.jar, and a minimal runtime configuration. Together, these components form a complete template for deploying an Unreal server on Odin Fleet and connecting it to GameLift’s backend services.
+
+A matching backend implementation for session management is available here:
+https://github.com/unterpunkt9/Odin_Gamelift_BackendService
+
+## Requirements:
+* **Unreal Engine Dedicated Server Build (Linux)**: Needed to run the game server inside the container on Odin Fleet.
+* **Amazon GameLift Server SDK**: Enables the server to communicate with GameLift Anywhere for session activation, health checks, and lifecycle events.
+* **Amazon GameLift Server Agent**: Handles compute registration, authentication, and process management for GameLift Anywhere inside the container.
+* **Docker**: Used to build the container image that will be deployed on Odin Fleet.
+* **Odin Fleet Account**: Required to host and run the containerized dedicated server. The integration with GameLift Anywhere enables matchmaking and game session discovery.
+
+## Dedicated Game Server
+If you don't already have one, create an Unreal Engine dedicated server build. A full instruction can be found [here](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-dedicated-servers?application_version=4.27).
 The example is for 4.27 but the steps are the same in 5.6.
 
-### GameLift Server SDK
+## GameLift Server SDK
 To connect the Gameserver with Amazon Gamelift, the server needs the Gamelift Server SDK. The different versions can be found [here](https://docs.aws.amazon.com/gameliftservers/latest/developerguide/reference-serversdk.html).
 We are using the [C++ SDK](https://github.com/amazon-gamelift/amazon-gamelift-plugin-unreal) for Unreal. Download and Build the SDK.
 
 Linux or Mac:
-```
+```bash
 chmod +x setup.sh
 sh setup.sh
 ```
 Windows
-```
+```bash
 powershell -file setup.ps1
 ```
 
@@ -32,8 +41,7 @@ When this is done, copy the sdk to your plugins inside the Unreal Project. There
 Just copy the folder that fits your need the most.
 Then add the Plugin to your PublicDependencyModules in your <projectName>.Build.cs
 
-```
-
+```c++
     if (Target.Type == TargetType.Server)
     {
         PublicDependencyModuleNames.Add("GameLiftServerSDK");
@@ -43,8 +51,8 @@ Then add the Plugin to your PublicDependencyModules in your <projectName>.Build.
     bEnableExceptions =  true;
 ```
 
-The next step is to initiate the SDK in the server. To do that, add to your GameMode.h following code.
-```
+The next step is to initiate the SDK in the server. To do that, add the following code to your GameMode implementation:
+```c++
 #pragma once
 
 #include "CoreMinimal.h"
@@ -73,11 +81,11 @@ private:
     TSharedPtr<FProcessParameters> ProcessParameters;
 }; 
 ```
-and implement the InitiateGameLift function in the corresponding .cpp.
+and implement the ``InitiateGameLift`` function.
 
 Add the SDK includes and instantiate the ProcessParameters:
 
-```
+```c++
 #include "YourGameMode.h"
 
 #include "UObject/ConstructorHelpers.h"
@@ -93,13 +101,13 @@ DEFINE_LOG_CATEGORY(GameServerLog);
 
 AYourGameMode::AYourGameMode() : ProcessParameters(nullptr)
 {
-  ...//Your contructor code
+  ... // Your constructor code
 }
 ```
 
-Implement InitiateGameLift:
+Implement `InitiateGameLift`:
 
-```
+```c++
 void AYourGameMode::InitiateGameLift()
 {
     #if WITH_GAMELIFT
@@ -107,7 +115,7 @@ void AYourGameMode::InitiateGameLift()
     FGameLiftServerSDKModule* GameLiftSdkModule = &FModuleManager::LoadModuleChecked<FGameLiftServerSDKModule>(FName("GameLiftServerSDK"));
 
     UE_LOG(GameServerLog, Log, TEXT("Initializing the GameLift Server..."));
-    //InitSDK will establish a local connection with GameLift's agent to enable further communication.
+    // InitSDK will establish a local connection with the gamelift agent to enable further communication.
     FGameLiftGenericOutcome InitSdkOutcome = GameLiftSdkModule->InitSDK();
 
         if (InitSdkOutcome.IsSuccess())
@@ -128,9 +136,10 @@ void AYourGameMode::InitiateGameLift()
 
         ProcessParameters = MakeShared<FProcessParameters>();
 
-    //When a game session is created, Amazon GameLift Servers sends an activation request to the game server and passes along the game session object containing game properties and other settings.
-    //Here is where a game server should take action based on the game session object.
-    //Once the game server is ready to receive incoming player connections, it should invoke GameLiftServerAPI.ActivateGameSession()
+    // When a game session is created, Amazon GameLift sends an activation request to the game server and 
+    // passes along the game session object containing game properties and other settings.
+    // Here is where your game server should take action based on the game session object.
+    // Once the game server is ready to receive incoming player connections, it should invoke GameLiftServerAPI.ActivateGameSession()
     ProcessParameters->OnStartGameSession.BindLambda([=](Aws::GameLift::Server::Model::GameSession InGameSession)
         {
             FString GameSessionId = FString(InGameSession.GetGameSessionId());
@@ -138,9 +147,9 @@ void AYourGameMode::InitiateGameLift()
             GameLiftSdkModule->ActivateGameSession();
         });
 
-    //OnProcessTerminate callback. Amazon GameLift Servers will invoke this callback before shutting down an instance hosting this game server.
-    //It gives this game server a chance to save its state, communicate with services, etc., before being shut down.
-    //In this case, we simply tell Amazon GameLift Servers we are indeed going to shutdown.
+    // OnProcessTerminate callback. Amazon GameLift Servers will invoke this callback before shutting down an instance hosting this game server.
+    // It gives this game server a chance to save its state, communicate with services, etc., before being shut down.
+    // In this case, we simply tell Amazon GameLift Servers we are indeed going to shutdown.
     ProcessParameters->OnTerminate.BindLambda([=]()
 	{
 		UE_LOG(GameServerLog, Log, TEXT("Game Server Process is terminating"));
@@ -150,7 +159,7 @@ void AYourGameMode::InitiateGameLift()
 		if (processEndingOutcome.IsSuccess() && destroyOutcome.IsSuccess())
 		{
 			UE_LOG(GameServerLog, Log, TEXT("Server process ending successfully"));
-			FGenericPlatformMisc::RequestExit(false); //Important, otherwise it could remain an process open, that blocks the used port
+			FGenericPlatformMisc::RequestExit(false); //Important, otherwise it could remain an open process, that blocks the used game server port
 		}else{
 			if (!processEndingOutcome.IsSuccess()) {
 				const FGameLiftError& error = processEndingOutcome.GetError();
@@ -164,12 +173,13 @@ void AYourGameMode::InitiateGameLift()
 			}
 		}
 	});
-        //This is the HealthCheck callback.
-    //Amazon GameLift Servers will invoke this callback every 60 seconds or so.
-    //Here, a game server might want to check the health of dependencies and such.
-    //Simply return true if healthy, false otherwise.
-    //The game server has 60 seconds to respond with its health status. Amazon GameLift Servers will default to 'false' if the game server doesn't respond in time.
-    //In this case, we're always healthy!
+    // This is the HealthCheck callback.
+    // Amazon GameLift Servers will invoke this callback every 60 seconds.
+    // Here, a game server might want to check the health of dependencies and such.
+    // Simply return true if healthy, false otherwise.
+    // The game server has 60 seconds to respond with its health status. 
+    // Amazon GameLift Servers will default to 'false' if the game server doesn't respond in time.
+    // In this case, we're always healthy!
     ProcessParameters->OnHealthCheck.BindLambda([]()
         {
             UE_LOG(GameServerLog, Log, TEXT("Performing Health Check"));
@@ -227,8 +237,8 @@ void AYourGameMode::InitiateGameLift()
 }
 ```
 
-And call it in BeginPlay
-```
+And call it in ``BeginPlay``
+```c++
 void AOdinFleetGameMode::BeginPlay()
 {
 	Super::BeginPlay();
@@ -240,37 +250,38 @@ void AOdinFleetGameMode::BeginPlay()
 ```
 
 You dont need to initalize and set any parameter used for AnywhereFleets. These get handled by the GameLift Server Agent.
-If your're interested in doing that manually, there is a guide inside the README.md in the plugin folder.
+  If your're interested in doing that manually, there is a guide inside the `README.md` in the plugin folder.
 
-The minimum the GameServer has to do is:
-* Call InitSDK()
-* Implement GameSessionCallbacks (OnStartGameSession,OnTerminate,OnHealthCheck)
+The minimum the game server has to do is:
+* Call `InitSDK()`
+* Implement GameSessionCallbacks (`OnStartGameSession`, `OnTerminate` and`OnHealthCheck`)
 * Set the used port.
-* Call ProcessReady()
+* Call `ProcessReady()`
 
 
+## GameLift Server Agent
 
-### GameLift Server Agent
-The Server Agent handles all neccessary steps to work with GameLift
- * Takes AccessKey of your AWS Account
+The GameLift Server Agent handles all neccessary steps to connect your game server with GameLift:
+
+ * Reads the AccessKey of your AWS Account
  * Registers a compute device
  * Reads and refreshes the auth-token for the compute device
- * Starts the Gameserver with set parameters
- * Manages the hearbeat
+ * Starts game servers with preconfigured parameters
+ * Manages the heartbeat
 
+### AWS account and User Permissions
 
-#### AWS Account and Userpermissions
-At first create an AWS Account. With that account, go to Identity and Access Management(IAM) and create a new user. Select this new user and create an Access key for it. Go to Security credentials -> Create access key and store it savely.
+To allow the GameLift Agent to register your compute device and communicate with GameLift Anywhere, you must set up an IAM user with the correct permissions.
 
-The user needs a few permission for the tasks done by the agent.
-For following tasks, the user needs permissions:
-* Register Compute
-* GetComputeAuthToken
-* DeregisterCompute
+1. In the AWS Console, open IAM and create a new user.
+2. Under Security Credentials, create a new Access Key (Security credentials > Create access key) and store it safely.
+3. This user must have permissions for the tasks the GameLift Agent performs:
+   - gamelift:RegisterCompute
+   - gamelift:GetComputeAuthToken
+   - gamelift:DeregisterCompute
 
-The cleanest way is to create a new policy, give it a name and add it to the user.
-In the AWS Console navigate to IAM->Policies and create a new policy.
-Select the persmission in the visual editor or switch from Visual to JSON and insert them:
+The easiest way is to create a custom policy that includes these actions.
+Go to IAM > Policies, create a new policy, and add the required permissions either via the visual editor or by switching to the JSON view to paste the following policy definition:
 ```
 {
 	"Version": "2012-10-17",
@@ -296,9 +307,9 @@ Select the persmission in the visual editor or switch from Visual to JSON and in
 	]
 }
 ```
-Click Next->Save Changes and go back to the user. Add the created policy and the user is ready to be used by the agent.
+Click Next > Save Changes and go back to the user. Add the created policy and the user is ready to be used by the agent.
 
-#### Gamelift Location and Fleet
+### Gamelift Location and Fleet
 Navigate to [Amazon Gamlift Servers](https://eu-central-1.console.aws.amazon.com/gameliftservers/dashboard) and create a custom Location for your AnywhereFleet.
 ![Location](Documentation/Location.jpg)
 
@@ -308,38 +319,37 @@ Then create an AnywhereFleet
 Give it an name and select your custom location.
 
  
-#### Initiate the Agent
-Download the agent from the [Github page](https://github.com/amazon-gamelift/amazon-gamelift-agent).
+### Initiate the Agent
+In this step, you prepare and build the GameLift Agent, then provide it with a runtime configuration so it knows how to start your dedicated server inside the container.
 
-To build the agent you need at least java 17 and maven 3.2.5
-You can check both versions with:
-```
+Clone the repository from the [Github page](https://github.com/amazon-gamelift/amazon-gamelift-agent).
+
+To build the agent you need at least Java JDK 17 and maven 3.2.5.
+You can verify that the required versions are installed by calling:
+
 Java:
+```bash
 java -version
+```
 
 Maven:
+```bash
 mvn -version
 ```
 
-If missing or having a lower version, you can donwload them:
+If you're missing the requirements or have outdated versions, you can install the requirements at:
 * [Java](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html)
 * [Maven](https://maven.apache.org/download.cgi)
 
 When both match the minimum version, open a new terminal/cmd in the root of the agent(where the pom.xml is located) and build the Agent
-```
+```bash
 mvn clean compile assembly:single
 ```
-If it is successfull, the .jar file is located at
-```
-./target/GameLiftAgent-1.0.jar
-```
-
-That .jar file will be the entrypoint of the Docker image which is created later.
-
+If it is successfull, the .jar file is located at `./target/GameLiftAgent-1.0.jar`. This `.jar` file will be the entrypoint of the Docker image which is created later.
 
 The agent needs to know where the server executable is located. This information is provided by a runtime-config.json.
 This is structured as followed:
- ```
+ ```json
  {
   "ServerProcesses": [
     {
@@ -352,48 +362,58 @@ This is structured as followed:
   "GameSessionActivationTimeoutSeconds": 300
 }
  ```
-On Windows the LaunchPath has to start witch 
+
+**IMPORTANT** On Windows the LaunchPath is required to start with 
 `C:/Game/`,
-on Linux with `/local/game/`.
+on Linux with `/local/game/`. Using a launch path that starts differently will not work with the default gamelift agent code.
 
-If you need a full documentation, check [this](https://docs.aws.amazon.com/gameliftservers/latest/apireference/API_RuntimeConfiguration.html).
+For more information, please take a look at the [gamelift agent runtime configuration documentation](https://docs.aws.amazon.com/gameliftservers/latest/apireference/API_RuntimeConfiguration.html).
 
-### Docker
-OdinFleet is using dockerimages to install the Gameserver. Install [Docker](https://docs.docker.com/desktop/setup/install/windows-install/), create an account and enabel Windows Subsystem for Linux.
-This is done in a command prompt by:
+## Docker
+Odin Fleet deploys your dedicated server as a Docker image, so you need a working Docker environment to build and package the server.
+Install Docker Desktop using the official installer:
 
-`wsl --install`
+https://docs.docker.com/desktop/setup/install/windows-install/
 
-#### Unreal Server Build
- For that image you are creating you need a Linux build of the GameServer. To do that you need to install the Linux Cross-Compile chain. There is an [Unreal Guide](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine?application_version=5.0) with referenced versions. Download the corredt one and install it. You can verify the installation in a terminal with:
+Docker Desktop requires the Windows Subsystem for Linux (WSL). If it is not enabled yet, you can activate it through the command prompt:
 
-`echo %LINUX_MULTIARCH_ROOT%` 
-Now build the server-executable.
+```bash
+wsl --install
+```
 
-Open the Editor and Package the Server.
+Once Docker and WSL are installed, you can build the image that will later run on Odin Fleet.
+
+### Unreal Server Build
+
+ For the Docker image you are creating you need a Linux build of the game server. To do that you need to install the Linux Cross-Compile chain. Please take a look at the [Unreal Guide](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine?application_version=5.0) to setup the cross-compilation chain. You can verify the installation in a terminal by calling:
+
+```echo %LINUX_MULTIARCH_ROOT%```
+
+Now build the server-executable. Open the Editor and package the project using the `Server` Build Target.
 
 ![Editor Package](Documentation/Package.jpg)
 
-You can also package the server with the command prompt.
-```
+You can also package the server using the following command prompt:
+```bash
 <path-to-source-built-engine>/Engine/Build/BatchFiles/RunUAT.bat BuildCookRun ^
  -project="<path-to-your-project>/<YourProject>.uproject" ^
  -noP4 -server -platform=Linux -clientconfig=Shipping -serverconfig=Shipping ^
  -cook -allmaps -build -stage -pak -archive ^
  -archivedirectory="<Your-package-folder>"
 ```
-#### Prepare Dockerimage
-Now Create a folder (for example DockerImageData) with all needed files. You need:
+### Preparing the Docker image
+Create a folder (e.g., DockerImageData) that contains all files required to build the server image. Your file structure should look like this:
+
 ```
-DockerImageData
--<Your-package-folder>
--GameLiftAgent-1.0.jar
--runtime-config.json
+/DockerImageData/
+    /<Your-package-folder>  # Your packaged Unreal Linux server build
+    /GameLiftAgent-1.0.jar  # The built GameLift Agent
+    /runtime-config.json    # Runtime configuration for the agent
 ```
-Inside DockerImageData create a Dockerfile. The dockerfile copies the required files into the dockerimage and sets the entrypoint. The entrypoint is the script or executable which is called when the dockercontainer gets started.
+Inside this folder, create a Dockerfile. This file defines how the image is built, copies all necessary files into the container, and sets the entrypoint, the script or executable that runs when the container starts.
 
 Dockerfile:
-```
+```docker
 FROM ghcr.io/epicgames/unreal-engine:runtime
 
 USER root
@@ -421,10 +441,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 ```
 
 We are using a script as entrypoint to start the agent and pass required parameters.
-Create a file entrypoint.sh inside DockerImageData.
+Create a file `entrypoint.sh` inside your docker file folder.
 
 entrypoint.sh:
-```
+```sh
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -446,26 +466,28 @@ exec java -jar /gamelift/agent.jar -c "${COMPUTE_NAME}" -f "${FLEET_ID}" -loc "$
 ```
 
 This script reads the enviromnent variables and passes them to the agent.
-The compute name is generated. When the agent is closed, the registered compute remains in the state TERMINATING for about 1-3 days until AWS sets it back to ACTIVE. When you try to register an existing Compute-name that is in TERMINATING, the register fails and the agent cannot succesfull connect to an AWS compute-device.
+The compute name is generated randomly, because when the agent is closed, the registered compute device remains in the state `TERMINATING` for about 1-3 days until AWS sets it back to ACTIVE. When you try to register an existing Compute-name that is in the `TERMINATING` state, the register fails and the agent cannot succesfull connect to an GameLift compute device.
 
-#### Runtime-config
+### Runtime Config
 
-You can either upload the config to AWS or copy it to the image and set the path to the agent.jar call
+You can either upload the config to AWS or copy it to the image and set the path in the agent.jar call.
 
-Upload it with the [AWS-CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html):
+To upload it using the [AWS-CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), call:
 
-`aws gamelift update-runtime-configuration --<your-fleet-oid> --runtime-configuration file://<path-to-config>/runtime-config.json --region <your-region>`,
+```sh
+aws gamelift update-runtime-configuration --<your-fleet-id> --runtime-configuration file://<path-to-config>/runtime-config.json --region <your-region>
+```
 
 and the agent loads it automatically.
 
-If you want to add it manually, add -runtime-configuration or -rc as parameter to the `exec java -jar /gamelift/agent.jar` call and pass the config as inline JSON.
+If you want to set it manually, add `-runtime-configuration` or `-rc` as a parameter to the `exec java -jar /gamelift/agent.jar` call and pass the config as inline JSON.
 
-The Unreal LinuxBuild contains an GameServer.sh in its root. This script calls the server executable which is located in `\LinuxServer\<your-project-name>\Binaries\Linux`.
-We use that .sh scrip as LaunchPath in the runtime-config. 
-Inside that script we can pass the external port of the OdinFleet server. This is needed because the gameserver cant use the unreal-defaultport 7777. It needs to listen to the external port of the Hardwareserver.
+The Unreal Linux build contains an `GameServer.sh` in its root directory. This script calls the server executable which is located in `\LinuxServer\<your-project-name>\Binaries\Linux`.
+We use that .sh scrip as the `LaunchPath` value in the runtime-config. 
+Inside the `GameServer.sh` script we can pass the external port of the OdinFleet server. 
 
-An example to pass the port inside the server.sh:
-```
+You can use this sample `GameServer.sh` to automatically read the external Odin Fleet port from the environment variables:
+```sh
 #!/bin/sh
 UE_TRUE_SCRIPT_NAME=$(echo \"$0\" | xargs readlink -f)
 UE_PROJECT_ROOT=$(dirname "$UE_TRUE_SCRIPT_NAME")
@@ -478,111 +500,114 @@ fi
 
 "$UE_PROJECT_ROOT/<your-project-name>/Binaries/Linux/<your-project-executable>" <your-project-name> "$@" $PORT_ARG
 ```
-**Keep in mind that this file will be overridden if your repackage your project!**
+**IMPORTANT: Please keep in mind that this file will be overridden if your repackage your project, you will need to update this every time you create a new game server build or adjust your Build Scripts accordingly.**
 
-Now you can to build the dockerimage. Open a command prompt in the directory where the Dockerfile is located and call:
-#### Build Dockerimage
-`docker build -t <your-image-name>:<your-image-tag> .`
+Now we can build the docker image.
 
-You can now test that image local inside Docker Desktop. Go to image, locate your server image and click run. Now you need to pass the envirnment variables and set the port.
-These variables are required if you followed the examples:
+### Building the Docker Image
+
+Open a command prompt in the directory where the Dockerfile is located and call:
+
+```sh
+docker build -t <your-image-name>:<your-image-tag> .
+```
+
+You can now test the image locally on your PC using Docker Desktop. Navigate to image, locate your server image and click run. Now you need to pass the environment variables and set the port.
+
+The following variables are required when using the example setup:
 * FLEET-ID
 * LOCATION
 * REGION
-* PUBLIC_IP (Ip-address of the odinfleet server)
+* PUBLIC_IP (IP address of the Odin Fleet server)
 * EXTERNAL_PORT
 
 These are used by the Agent internally:
 * AWS_ACCESS_KEY_ID
 * AWS_SECRET_ACCESS_KEY
 
-If everything works local you can tag and push this image to dockerhub.
+If everything works locally you can tag and push this image to [Docker Hub](https://hub.docker.com/). 
 
-```
+```sh
 docker tag <your-image-name>:<image-tag> <docker-username>/<your-image-name>:<release-tag>  
-# release tag can be a version or something like latest/release etc.
+# release tag can use any versioning scheme
 
 docker push <docker-username>/<your-image-name>:<release-tag>
-
 ```
 
-### OdinFleet
-The final step is to load the image on an OdinFleet server.
+## OdinFleet
+The final step is to load the image on an Odin Fleet server.
 You can follow the guide steps for creating a Fleet App ([Minecraft-server example](https://docs.4players.io/fleet/guides/getting-started/) or [Unreal game server example](https://docs.4players.io/fleet/guides/unreal-server/))
 
-#### Server Config
+### Server Config
 
 Create a port in the Port Settings as mentioned in the referenced guides
+
 ![Create Port](Documentation/Port.jpg)
 
 Now add a Dynamic Variable to the Environment Variables
-![](Documentation/DynamicVar.jpg)
 
-This uses the server port as variable EXTERNAL_PORT which is used in server and is transmitted to Gamelift.
+![Setting dynamic variables](Documentation/DynamicVar.jpg)
+
+This supplies the EXTERNAL_PORT of the Odin Fleet server to the game server and is transmitted to Gamelift.
 
 This also adds a portmapping. The dockerimage gets this port as image port.
-````
+```
 ServerPort: 12345
 Image uses 12345 as Imageport
 Mapping:
 12345->12345
-````
+```
 
 
-### Backend Service
+## Backend Service
 
-To avoid storing AWS AccesKey inside the client, the client itself cannot communicate with AWS to retrieve GameSessions. This communication should be done with a BackendService. Usually this is some kind of a REST-API.
+To avoid storing an AWS Access Key inside the client, the client itself cannot communicate with AWS to retrieve game session data. This communication should be done with a custom Game Backend Service. Usually this is some kind of a REST-API.
 
-The client communicates with this API which uses AWS AccesKeys in a secure environment. 
-To build this API you need the [AWS Gamelifft client sdk](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/).
+The client communicates with this Game Backend Service, which uses AWS Acces sKeys in a secure environment. 
+To build this API you need the [AWS GameLift client sdk](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/).
 
-Install it  
-NPM: `npm install @aws-sdk/client-gamelift`
+Install it using:
 
-Yarn: `yarn add @aws-sdk/client-gamelift`
+**NPM**: `npm install @aws-sdk/client-gamelift`
 
-pnpm: `pnpm add @aws-sdk/client-gamelift`
+**Yarn**: `yarn add @aws-sdk/client-gamelift`
 
-You can use any kind of Node.js/web-service of your choice. In this example we are using GoogleCloud Run functions. We are not going deep into the initialization of an GoogleCloud project, just know these act the same as any other https endpoint.
-The base scheme of the client-sdk is following:
-* Create an iput object
+**pnpm**: `pnpm add @aws-sdk/client-gamelift`
+
+Please keep in mind, that you can use any kind of Node.js/web-service of your choice. In this example we are using GoogleCloud Run functions. We are not going deep into the initialization of an GoogleCloud project, just know these act the same as any other https endpoint. The source code for the Cloud functions can be found in the [Backend Service Github repository](https://github.com/unterpunkt9/Odin_Gamelift_BackendService).
+
+The base setup of the AWS client sdk is as follows:
+* Create an input object
 * Create the required command
 * Pass the input object
 * Execute the command
 
-First include the sdk,set some variables and create a GameliftClient:
-```
+First include the sdk, set some variables and create a GameLiftClient:
+```js
 const {onRequest} = require("firebase-functions/v2/https");
 const {GameLiftClient, SearchGameSessionsCommand, CreateGameSessionCommand, TerminateGameSessionCommand} = require('@aws-sdk/client-gamelift');
 
 const FleetID = "<your-fleet-id>";
-const Location = "your-location";
-const AWSRegion = "your-aws-region";//example: eu-central-1
+const Location = "your-location"; // the custom aws fleet location 
+const AWSRegion = "your-aws-region"; //example: eu-central-1
 const GCloudRegion = "your-gcloud-region";//example: europe-west3
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
-
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
-
 
 //Create the GameliftClient
 const gameLiftClient = new GameLiftClient({
-    region:"eu-central-1",
+    region: AWSRegion,
     credentials:{
-        accessKeyId:"",
-        secretAccessKey:""
+        accessKeyId:"<your-access-key-id>",
+        secretAccessKey:"<your-access-key>"
     }
 });
 ```
 
-Note: You can and should store your AWS Credentials in a credential-file, environment-variable or an secure-storage.
+**Note**: You can and should store your AWS Credentials in a credentials-file, environment-variable or another secure storage.
 
-Now you can add the needed commandcalls.  
-Example [Search for Gamesessions](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/SearchGameSessionsCommand/):
-```
+Now you can add the needed commands.
+
+Example implementation for [Search for Game Sessions](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/SearchGameSessionsCommand/) logic:
+```js
 exports.<your-function-name> = onRequest({region:GCloudRegion},async(req,res)=>{
 
     const SearchInput = {
@@ -605,12 +630,9 @@ async function executeCommand(res,command){
         throw error;
     }
 }
-
-
 ```
-
-Example [Create GameSession](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/CreateGameSessionCommand/):
-```
+Example implementation for [Create Game Sessions](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/CreateGameSessionCommand/) logic:
+```js
 exports.<your-function-name> = onRequest({region:GCloudRegion},async (req,res)=>{
     if(req.body.CreatorId === undefined){
         res.status(401).send("Missing CreatorId");
@@ -633,8 +655,8 @@ exports.<your-function-name> = onRequest({region:GCloudRegion},async (req,res)=>
     return;
 });
 ```
-Example [Terminate GameSession](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/TerminateGameSessionCommand/):
-```
+Example implementation for [Terminate Game Sessions](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-gamelift/Class/TerminateGameSessionCommand/) logic:
+```js
 exports.<your-function-name> = onRequest({region:GCloudRegion},async (req, res) =>{
 
     if(req.body.GameSessionId === undefined){
@@ -650,12 +672,14 @@ exports.<your-function-name> = onRequest({region:GCloudRegion},async (req, res) 
     await executeCommand(res,command);
 });
 ```
-Note: These examples don't handle any sercurity or authorization. To secure your service against unwanted or unauthorized calls you need to use your own security layer!
+**Note**: These examples don't use any authorization logic. To secure your service against unwanted or unauthorized calls you need to implement your own security layer!
 
-### Unreal Game Client
-Now you need to connect the GameClient with your Backendservice. We are doing this with an c++ httpRequest:
+## Unreal Game Client
+To allow the client to discover available GameLift sessions, it must communicate with your backend service rather than contacting GameLift directly. The backend exposes simple HTTP endpoints (in our example, via Google Cloud Functions) that return session data or create new sessions.
 
-```
+The following example shows how to query your backend from Unreal Engine using a C++ HTTP request and parse the returned JSON into your own session structures.
+
+```c++
 void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
 {	
 	TFunction<void(const FJsonObject& Result, const FString& Error)> Done;
@@ -705,10 +729,11 @@ void UGLBSServiceConnector::GetSessions(FSearchComplete OnReady)
 ```
 
 
-### Communication ways
+## Communication ways
 
 The following chart shows the Gamelift communication. Game communication between server and client is excluded.
-![Übersicht](Documentation/Mermaid.jpg)
+
+![Overview](Documentation/Mermaid.jpg)
 
 
 
